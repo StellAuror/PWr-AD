@@ -1,0 +1,197 @@
+---
+title: "Analiza danych - projekt pulpitu menedżerskiego"
+date: "`r Sys.Date()`"
+author: 
+  - Michal Krawczuka (260502)
+  - Dominik Surma (260554)
+output:
+  rmdformats::material:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: true
+    highlight: tango
+    css: style.css
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE,
+	echo = FALSE
+)
+```
+
+```{r}
+# Manipulacja danymi
+library(readr)
+library(tidyverse)
+
+# Wizualizacja danych
+library(DT)
+library(plotly)
+library(echarts4r)
+
+# Markdown
+library(kableExtra)
+library(knitr)
+```
+
+# Airlines passengers
+
+## Wybór danych
+
+Analizowany [zbiór danych](https://www.kaggle.com/datasets/teejmahal20/airline-passenger-satisfaction) zawiera informacje pochodzące z ankiety mierzącej satysfakcję klientów linii lotniczych. </br></br> Ze względu na popularność zbioru w zastosowaniach predykcyjnych, jest on udostępniony w postaci dwóch plików, podzielonych na zbiór uczący i testowy. Na potrzeby projektu zostanie on połączony w jeden, co zwiększy jego wartość w opisie deskryptywnym zbioru danych.
+
+<!--# Złączenie dwóch zbiorów danych w celu zwiększenia wartości deskryptywnej zbioru -->
+
+```{r}
+df1 <- read_csv("data/test.csv")
+df2 <- read_csv("data/train.csv")
+
+df <- rbind(df1, df2) %>% select(-"...1")
+
+df %>% head(100) %>%
+  datatable(
+    options = list(
+      pageLength = 10,
+      lengthMenu = F,
+      editable = F,
+      style = "bootstrap4",
+      selection = "single",
+      colReorder = T,
+      dom = "Bfrtip"
+    ),
+    extensions = "Responsive"
+  )
+
+#df$satisfaction %>% unique
+```
+
+## Problem biznesowy
+
+Organizacja świadcząca usługi lotnicze przeprowadziła wśród swoich klientów ankietą, mającą na celu zbadać satyfakcję oraz znaleźć jej przyczynę.
+
+-   Co sprawia, że klienci są niezadowoleni z lotu?
+
+-   Co wpływa na wysoką satysfakcję z podróży?
+
+Odpowiedzi na powyższe pytania zostaną dostarczone w pulpicie menedżerskim.
+
+## Wybór środowiska
+
+Zarówno do analizy danych, jak i opracowania pulpitu menedżerskiego, wybrano środowisko R. Głównymi bibliotekami, potrzebnymi do przygotowania pulpitu, będą:
+
+-   **shiny** (i pochodne, m.in. bs4Dash, shinywidgets, htmltools i więcej) - interaktywne dashboardy oparte o technologię bootstrap
+
+-   Zestaw pakietów **tidyverse** - manipulacja danymi i importowanie
+
+-   **echarts4r, plotly, ggplot2** - wizualizacja
+
+## Analiza danych niezagregowanych
+
+```{r}
+df %>%
+  ggplot(
+    aes(
+      x = `Flight Distance`,
+      y = `Departure Delay in Minutes`,
+      colour = satisfaction
+    )
+  ) +
+  geom_point(alpha = .5)
+
+df.fdddm <- 
+  df %>%
+    mutate(
+      `Flight Distance` = log10(`Flight Distance`),
+      `Departure Delay in Minutes` = log10(`Departure Delay in Minutes`)
+    )
+
+# Main plot - histogram2d
+plot.fdddm.1 <- 
+  df.fdddm %>%
+      plot_ly(
+        x = ~`Flight Distance`,
+        y = ~`Departure Delay in Minutes`
+      ) %>%
+      add_histogram2d()
+
+# Top plot - histogram FD
+plot.fdddm.2 <- 
+  df.fdddm %>%
+      plot_ly(
+        x = ~`Flight Distance`,
+        marker = list(color = "black")
+      ) %>%
+      add_histogram(nbinsx = 25)
+
+# Right plot - histogram FD
+plot.fdddm.3 <- 
+  df.fdddm %>%
+      plot_ly(
+        y = ~`Departure Delay in Minutes`,
+        marker = list(color = "black")
+      ) %>%
+      add_histogram(nbinsy = 25)
+
+
+subplot(
+  plot.fdddm.2, 
+  plotly_empty(), 
+  plot.fdddm.1,
+  plot.fdddm.3,
+  nrows = 2, heights = c(0.2, 0.8), widths = c(0.8, 0.2), 
+  shareX = TRUE, shareY = TRUE, titleX = FALSE, titleY = FALSE
+)
+
+df.fdddm %>% 
+  group_by(satisfaction) %>%
+  do(
+    p = plot_ly(
+      data = .,
+      x = ~`Flight Distance`,
+      y = ~`Departure Delay in Minutes`,
+      name = ~satisfaction,
+      showscale = F
+    ) %>%
+    add_histogram2d() %>%
+    layout(
+      title = ~satisfaction
+    )
+  ) %>% 
+  subplot(
+    shareX = T,
+    shareY = T,
+    nrows = 1
+  )
+
+```
+
+```{r}
+
+df[1:1000,] %>% 
+  group_by(satisfaction) %>%
+  summarise(sum = n()) %>%
+  mutate(percentage = sum/sum(sum)) 
+
+names <- df %>% names
+names <- names[2:6]
+
+# df$Age <- df$Age %>% cut(breaks = seq(1, 100, 20))
+
+
+for(i in names) {
+    df %>%
+      select(var = i) %>%
+      cbind(
+        df %>%
+          select(satisfaction)
+      ) %>%
+      group_by(var, satisfaction) %>%
+      summarise(count = n()) %>%
+      mutate(percentage = count/sum(count)) %>%
+    print
+}
+
+```

@@ -1,0 +1,154 @@
+---
+title: "Analiza danych - projekt pulpitu menedżerskiego"
+date: "`r Sys.Date()`"
+author: Michał Krawczuk
+output:
+  rmdformats::material:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: true
+    highlight: tango
+    css: style.css
+---
+
+# Wykorzystywane biblioteki
+
+```{r setup}
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE,
+	echo = FALSE
+)
+```
+
+```{r}
+# Manipulacja danymi
+library(readr)
+library(tidyverse)
+library(readxl)
+library(rstatix)
+
+
+# Wizualizacja danych
+library(DT)
+library(plotly)
+library(echarts4r)
+library(ggpubr)
+library(summarytools)
+library(GGally)
+
+# Markdown
+library(kableExtra)
+library(knitr)
+```
+
+# Problem
+
+## Biznesowy
+
+Analiza skuteczności przedstawicieli biznesowych w zdobywaniu klientów.
+
+## Analityczny
+
+Znalezienie zależności między czasem rozmowy poszczególnych przedstawicieli biznesowych, a kwotami zakupu ich klientów
+
+## KPI
+
+Stosunek czasu rozmowy do kwoty zakupu oraz średni ilość rozmów w danym miesiącu
+
+# Opis danch
+
+## Kolumny
+
+-   numer klienta - Identyfikator klienta
+
+-   czas rozmowy - czas rozmowy pomiędzy agentem, a klientem
+
+-   kwota zakupu - kwota zakupu będąca implikacją rozmowy
+
+-   przedstawiciel - Identyfikator przedstawiciela
+
+-   data rozmowy - data przeprowadzenia rozmowy agenta z klientem
+
+-   Imię i naziwsko - dane personalne agenta
+
+-   Oddział - oddział, w którym znajduje się dany agent
+
+-   Region - region, w którym znajduje się dany oddział
+
+## Implicite
+
+-   Całkowite kwoty zakupów
+    -   poszczególnych klientów
+
+    -   klientów pochodzących od konkretnego agenta
+-   Liczba klientów obsługiwanych przez danego agenta
+-   Rozkład wartości zakupów w poszczególnych okresach
+    -   Z uwzględnieniem danego klienta
+
+    -   Z uwzględnieniem danego agenta
+-   Stosunek czasu rozmowy do kwoty zakupu
+
+## Wstępna analiza
+
+```{r}
+# Wczytywanie danych i ustalanie typów
+clients <- 
+  read_excel("data/01_klienci4.xlsx", 
+    sheet = "klienci4") %>%
+  mutate(`data rozmowy` = as.Date(`data rozmowy`, origin = "1900-01-01"))
+
+clients.agent <-
+  read_excel("data/01_klienci4.xlsx", 
+    sheet = "dane")
+
+# Łączenie baz
+df <- left_join(clients, clients.agent, by = c("przedstawiciel" = "przedstawiciel"))
+
+# Faktoryzacja
+df <- 
+  df %>%
+  mutate(
+    `numer klienta` = factor(`numer klienta`),
+    `przedstawiciel` = factor(`przedstawiciel`)
+   )
+
+# Wyliczanie kolumn
+df <- 
+  df %>%
+  mutate("skutecznosc" = (`kwota zakupu`/`czas rozmowy`) %>% round(2)) 
+
+df %>% DT::datatable()
+
+df %>% group_by(przedstawiciel) %>%
+  summarise(
+    "mediana zakupu" = median(`kwota zakupu`),
+    "srednia skutecznosc" = mean(`skutecznosc`) %>% round(1)
+    ) 
+
+library(lubridate)
+
+
+
+df %>% 
+  ggplot(
+    aes(
+      x = `data rozmowy`,
+      y = `kwota zakupu`
+    )
+  ) +
+  geom_smooth(se = F) +
+  facet_wrap(~przedstawiciel) + theme_minimal()
+
+```
+
+```{r chunk_name, results="asis", warning=FALSE}
+dfSummary(df, 
+          plain.ascii  = FALSE, 
+          style        = "grid", 
+          graph.magnif = 0.75, 
+          valid.col    = FALSE,
+          tmp.img.dir  = "/tmp")
+
+```

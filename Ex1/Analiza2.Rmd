@@ -1,0 +1,148 @@
+---
+title: "Analiza danych - zadanie 2/ Bank additional"
+date: "`r Sys.Date()`"
+author: Michał Krawczuk
+output:
+  rmdformats::material:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: true
+    highlight: tango
+    css: style.css
+---
+
+
+
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE,
+	echo = FALSE
+)
+```
+
+```{r}
+# Manipulacja i eksploracja danych
+library(readr)
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(rstatix)
+library(corrplot)
+
+
+# Wizualizacja danych
+library(DT)
+library(plotly)
+library(echarts4r)
+library(ggpubr)
+library(summarytools)
+library(GGally)
+
+# Markdown
+library(kableExtra)
+library(knitr)
+```
+
+# Cele i mierniki
+
+## Biznesowy
+
+Zdefiniowanie grupy docelowych klientów, którzy chętniej podejmują pozytywną decyzję o założeniu lokaty
+
+## Analityczny
+
+Znalezienie korelacji w danych historycznych, która pozwoli na łatwiejszą identyfikację osób o większej skłonności do założenia lokaty
+
+## KPI
+
+Korelacja między zmienną objaśniającą, a założeniem konta bankowego
+Procentowa dystrybucja poszczególnych czynników
+
+# Opis danych
+
+## Deskryptywny
+
+```{r}
+bank_full <- read_delim("data/bank-additional/bank-additional-full.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+bank <- read_delim("data/bank-additional/bank-additional.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+# Porządkowanie zmiennych czasowy - z założeniem, że dane pochodzą z tego samego roku
+bank <- 
+  bank %>% 
+  # Konwersja zmiennej na znakową z podmianą wartości negatywnej
+  mutate(pdays = as.character(pdays)) %>% mutate(pdays =
+                  case_when(
+                    pdays == "999" ~ "non",
+                    T ~ pdays
+                  )
+                ) %>%
+  # uporządkowanie miesięcy zgodnie z hierachią kalendarzową
+  mutate(month = factor(month, ordered = T, levels = 
+                          c(
+                            "jan", "feb", "mar", "apr", "may", "jun", "jul",
+                            "aug", "oct", "sep", "nov", "dec"
+                          )
+                        ),
+         day_of_week = factor(day_of_week, ordered = T,
+                              levels = c(
+                                "mon", "tue", "wed", "thu", "fri", "sat", "sun"
+                              )),
+         # Przygotowanie zmiennej do mierzenia korealcji (patrz Szukanie korelacji)
+           y  = case_when(
+             y == "yes" ~ 1,
+             y == "no" ~ 0
+           )
+         )
+
+bank %>% DT::datatable()
+
+# przegląd struktry danych
+bank %>% glimpse
+```
+
+## Implicite
+
+-   przedziay wiekowe (np. sekwencja co 15 lat)
+
+-   data (wymaga przyjęcia dodatkowych założeń)
+
+```{r}
+bank$age <- bank$age %>% cut(breaks = seq(18, 100, 15))
+bank %>% select(age) %>% glimpse
+```
+
+## Wstępna analiza
+
+Przegląd typów zmiennych oraz ich przykładowych wartości
+
+```{r chunk_name, results="asis", warning=FALSE}
+dfSummary(bank, 
+          plain.ascii  = FALSE, 
+          style        = "grid", 
+          graph.magnif = 0.75, 
+          valid.col    = FALSE,
+          tmp.img.dir  = "/tmp") 
+
+
+```
+
+## Szukanie korelacji. 
+Pozwoli to na znalezienie zmiennych, które najlepiej nadają się do profilowania najbardziej wartosciowych (pod względem prawdopodobieństwa na założenie lokaty) klientów
+
+```{r}
+library(RColorBrewer)
+
+# dla poprawy analizy naezy przekonwertować zmienne kategoryczne (uporządkowane)
+# na typ dyskretny, numeryczny (lub znormalizowany ciągły) - brak czasu
+
+c <- cor(bank %>% select(where(is.numeric)), method = "spearman")
+corrplot(c, type = "upper", order="hclust",
+         col=brewer.pal(n=8, name="RdYlBu"))
+```
+
+
